@@ -97,6 +97,26 @@ def check_units(cfg: Config) -> tuple[str, str]:
     return (WARN, "; ".join(bad)) if bad else (OK, "all units enabled and active")
 
 
+def _unauthenticated_post(client: httpx.Client, url: str) -> httpx.Response:
+    return client.post(url, json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
+
+
+def _is_challenge(resp: httpx.Response) -> bool:
+    return resp.status_code == 401 and "resource_metadata=" in resp.headers.get("www-authenticate", "")
+
+
+def check_local(cfg: Config) -> tuple[str, str]:
+    """The app itself, bypassing the tunnel and any edge firewall."""
+    try:
+        with httpx.Client(timeout=5) as client:
+            resp = _unauthenticated_post(client, f"http://{cfg.bind}/mcp")
+    except httpx.HTTPError as e:
+        return WARN, f"server not answering on {cfg.bind}: {e}"
+    if not _is_challenge(resp):
+        return FAIL, f"unauthenticated POST /mcp on {cfg.bind} → {resp.status_code} (expected 401 with resource_metadata)"
+    return OK, "unauthenticated POST /mcp → 401 with resource_metadata"
+
+
 def check_public(cfg: Config) -> tuple[str, str]:
     if not cfg.base_url:
         return WARN, "base_url not set"
@@ -106,19 +126,20 @@ def check_public(cfg: Config) -> tuple[str, str]:
             meta = client.get(meta_url)
             if meta.status_code != 200 or meta.json().get("resource") != cfg.mcp_url:
                 return FAIL, f"GET {meta_url} → {meta.status_code}; resource must be {cfg.mcp_url}"
-            unauth = client.post(cfg.mcp_url, json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
+            unauth = _unauthenticated_post(client, cfg.mcp_url)
     except (httpx.HTTPError, ValueError) as e:
         return FAIL, f"{meta_url}: {e}"
-    challenge = unauth.headers.get("www-authenticate", "")
-    if unauth.status_code != 401 or "resource_metadata=" not in challenge:
-        return FAIL, f"unauthenticated POST /mcp → {unauth.status_code} (expected 401 with resource_metadata)"
-    return OK, "discovery document correct; unauthenticated POST /mcp → 401"
+    if _is_challenge(unauth):
+        return OK, "discovery document correct; unauthenticated POST /mcp → 401 (no edge firewall in front of /mcp)"
+    if unauth.status_code == 403:  # an edge rule that only admits Claude's servers blocks this machine too
+        return OK, "discovery document correct; POST /mcp from this machine → 403 (blocked at the edge)"
+    return FAIL, f"unauthenticated POST /mcp → {unauth.status_code} (expected 401, or 403 from an edge firewall)"
 
 
 CHECKS: list[tuple[str, Callable[[Config], tuple[str, str]]]] = [
     ("secrets", check_secrets), ("roots", check_roots), ("syncthing", check_syncthing), ("sqlite-vec", check_vec),
     ("embedding model", check_model), ("index.db", check_index), ("port", check_port), ("systemd units", check_units),
-    ("public endpoint", check_public),
+    ("local endpoint", check_local), ("public endpoint", check_public),
 ]
 
 
