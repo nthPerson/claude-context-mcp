@@ -244,6 +244,15 @@ class MachineResolver:
             self._cache.popitem(last=False)
         return name
 
+    def refresh(self, rel_path: str, mtime_ns: int) -> str:
+        """Ask Syncthing again, replacing a cached answer.
+
+        An answer obtained before Syncthing scanned a new file version names the previous
+        version's device, so callers re-ask once Syncthing reports the change.
+        """
+        self._cache.pop((rel_path, mtime_ns), None)
+        return self.machine_for(rel_path, mtime_ns)
+
     def _lookup(self, rel_path: str) -> str:
         assert self._client is not None and self._folder
         short = self._client.file_modified_by(self._folder, rel_path)

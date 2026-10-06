@@ -263,3 +263,35 @@ def test_claudeai_import(env, tmp_path: Path):
     assert conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 2
     assert Indexer(cfg, conn).reconcile().removed == 0  # reconcile leaves imported sessions alone
     assert conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 1
+
+
+def test_attribution_is_corrected_once_syncthing_has_scanned(env):
+    """Ingest usually beats Syncthing's scan, when Syncthing still names the previous device."""
+    cfg, conn, root = env
+    cfg.roots[0].machine = "syncthing:demo-folder"
+    answers = {"modified_by": None}
+
+    class FakeSyncthing:
+        def short_id_names(self, refresh: bool = False):
+            return {"AAAAAAA": "laptop", "BBBBBBB": "server"}
+
+        def file_modified_by(self, folder, rel_path):
+            return answers["modified_by"]
+
+    mem = root / KEY / "memory" / "fact.md"
+    mem.write_text("---\nname: fact\ndescription: d\n---\n\nbody\n")
+    write_transcript(root, [rec("user", "u1", "hello", ts=ts(0))])
+    idx = Indexer(cfg, conn, syncthing=FakeSyncthing())
+
+    answers["modified_by"] = "AAAAAAA"  # stale: the previous version's device
+    idx.reconcile()
+    assert conn.execute("SELECT modified_by FROM memories WHERE stem = 'fact'").fetchone()[0] == "laptop"
+
+    answers["modified_by"] = "BBBBBBB"  # Syncthing has scanned the new version
+    assert idx.refresh_machine(cfg.roots[0], f"{KEY}/memory/fact.md")
+    assert conn.execute("SELECT modified_by FROM memories WHERE stem = 'fact'").fetchone()[0] == "server"
+    assert conn.execute("SELECT machine FROM docs WHERE doc_type = 'memory'").fetchone()[0] == "server"
+    assert not idx.refresh_machine(cfg.roots[0], f"{KEY}/memory/fact.md")  # nothing left to correct
+    # a session keeps the machine it was first attributed to
+    idx.refresh_machine(cfg.roots[0], f"{KEY}/{SID}.jsonl")
+    assert conn.execute("SELECT machine FROM sessions").fetchone()[0] == "laptop"

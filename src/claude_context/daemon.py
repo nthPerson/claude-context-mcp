@@ -119,6 +119,7 @@ class Daemon:
                 rel = data.get("item") or data.get("path")
                 if root is not None and rel and classify(rel) is not None:
                     self.jobs.put(("path", root, rel))
+                    self.jobs.put(("machine", root, rel))  # Syncthing now knows who wrote this version
 
     def _embed_loop(self) -> None:
         embedder = embed.embedder_from_config(self.cfg)
@@ -153,6 +154,8 @@ class Daemon:
             _, root, rel = job
             if self.indexer.ingest_path(root, rel):
                 self.last_event[root.label] = db.utcnow()
+        elif kind == "machine":
+            self.indexer.refresh_machine(job[1], job[2])
         elif kind == "queue":
             path: Path = job[1]
             try:

@@ -15,7 +15,7 @@ import sqlite3
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from . import db, memfiles
@@ -32,6 +32,8 @@ log = logging.getLogger(__name__)
 READ_BYTES = 32 * 1024 * 1024
 EXCERPT_CHARS = 500
 HUB_MACHINE = "hub"
+UNKNOWN_MACHINE = "unknown"
+RECENT_SECONDS = 30 * 60  # attribution of files ingested this recently is re-checked at reconcile
 
 # files.kind values
 F_TRANSCRIPT, F_SUBAGENT, F_MEMORY, F_NOTE = "transcript", "subagent", "memory", "note"
@@ -146,14 +148,56 @@ class Indexer:
         self._embed_chunks = cfg.embedding.enabled
 
     # --- helpers -----------------------------------------------------------------------
+    def _resolver(self, folder: str) -> MachineResolver:
+        resolver = self._resolvers.get(folder)
+        if resolver is None:
+            resolver = self._resolvers[folder] = MachineResolver(self.syncthing, folder)
+        return resolver
+
     def _machine(self, root: RootConfig, rel: str, st: os.stat_result) -> str:
         folder = root.syncthing_folder
         if folder is None:
             return root.machine
-        resolver = self._resolvers.get(folder)
-        if resolver is None:
-            resolver = self._resolvers[folder] = MachineResolver(self.syncthing, folder)
-        return resolver.machine_for(rel, st.st_mtime_ns)
+        return self._resolver(folder).machine_for(rel, st.st_mtime_ns)
+
+    def refresh_machine(self, root: RootConfig, rel: str) -> bool:
+        """Correct an attribution made before Syncthing knew the file's current version.
+
+        A file is usually ingested (inotify) before Syncthing has scanned it, when Syncthing
+        still reports the previous version's device. Called when Syncthing announces the
+        change, and for recently ingested files at each reconcile.
+        """
+        folder = root.syncthing_folder
+        row = self._file_row(root, rel)
+        if folder is None or row is None or row["kind"] == F_NOTE:
+            return False
+        machine = self._resolver(folder).refresh(rel, row["mtime_ns"])
+        if machine == UNKNOWN_MACHINE or machine == row["machine"]:
+            return False
+        self.conn.execute("UPDATE files SET machine = ? WHERE id = ?", (machine, row["id"]))
+        if row["kind"] == F_MEMORY:
+            self.conn.execute("UPDATE memories SET modified_by = ? WHERE file_id = ?", (machine, row["id"]))
+            self.conn.execute("UPDATE docs SET machine = ? WHERE file_id = ? AND doc_type = 'memory'",
+                              (machine, row["id"]))
+            self.conn.execute("UPDATE chunks SET machine = ? WHERE doc_type = 'memory' AND ref_id IN "
+                              "(SELECT CAST(id AS TEXT) FROM memories WHERE file_id = ?)", (machine, row["id"]))
+        else:  # a session belongs to the machine that created it: only fill in an unknown one
+            s = self.conn.execute("SELECT id FROM sessions WHERE file_id = ? AND machine = ?",
+                                  (row["id"], UNKNOWN_MACHINE)).fetchone()
+            if s is not None:
+                self.conn.execute("UPDATE sessions SET machine = ? WHERE id = ?", (machine, s["id"]))
+                self.conn.execute("UPDATE docs SET machine = ? WHERE session_id = ?", (machine, s["id"]))
+                self.conn.execute("UPDATE chunks SET machine = ? WHERE session_id = ?", (machine, s["id"]))
+        self.conn.commit()
+        return True
+
+    def _refresh_recent_machines(self, root: RootConfig) -> None:
+        if root.syncthing_folder is None or self.syncthing is None:
+            return
+        cutoff = (datetime.now(UTC) - timedelta(seconds=RECENT_SECONDS)).strftime("%Y-%m-%dT%H:%M:%S")
+        for r in self.conn.execute("SELECT rel_path FROM files WHERE root = ? AND last_ingest_at >= ? "
+                                   "AND missing_since IS NULL", (root.label, cutoff)).fetchall():
+            self.refresh_machine(root, r["rel_path"])
 
     def _file_row(self, root: RootConfig, rel: str) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM files WHERE root = ? AND rel_path = ?", (root.label, rel)).fetchone()
@@ -213,6 +257,7 @@ class Indexer:
             stats.missing += m
             stats.removed += r
             self._set_conflicts(root, conflicts)
+            self._refresh_recent_machines(root)
             stats.per_root[root.label] = len(seen)
             db.set_meta(self.conn, f"reconcile:{root.label}", db.utcnow())
             self.conn.commit()
