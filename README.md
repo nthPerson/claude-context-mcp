@@ -169,6 +169,24 @@ tests are designed to fail loudly if its OAuth internals change.
 **Format drift.** Claude Code's transcript format changes over time. The parser ignores unknown fields and
 counts unknown record types; `hub_status` reports them so drift is visible instead of silently losing data.
 
+## Verified build facts
+
+Checked while building (October 2026); re-check when upgrading.
+
+| Item | Outcome |
+|---|---|
+| FastMCP API | Built on **fastmcp 4.0.11** (mcp 2.3.0). `GitHubProvider` takes `jwt_signing_key`, `client_storage`, `allowed_client_redirect_uris`, `require_authorization_consent`, `enable_cimd`; `stateless_http` is a parameter of `http_app()`. Details in [`docs/AUTH-NOTES.md`](docs/AUTH-NOTES.md). |
+| OAuth storage | `FileTreeStore` wrapped in `FernetEncryptionWrapper` (values encrypted; file names are not). `DiskStore` would need an extra dependency. |
+| Allowlist hook | FastMCP has no user allowlist; it is added by subclassing the provider (see the notes for the exact hooks and the private internals they depend on). |
+| Browser-facing paths | `/authorize`, `/consent`, `/auth/callback`. Everything else is called by Claude's servers. |
+| GitHub scope | None: `GET /user` returns the numeric id without any scope. Client-requested scopes are dropped. |
+| Token lifetime | With a GitHub **OAuth App** there are no refresh tokens and an issued access token lives up to a year; revoke by editing the allowlist or rotating `JWT_SIGNING_KEY`. A GitHub **App** gives expiring tokens with refresh rotation and needs no code change. |
+| Policy denials | The per-message guard answers with a JSON-RPC error (FastMCP middleware cannot set an HTTP status); the source-CIDR check additionally returns a real HTTP 403 before token verification. |
+| sqlite-vec | 0.1.9 supports vec0 metadata columns with filters; `INSERT OR REPLACE` is not supported (delete, then insert). |
+| FTS5 | SQLite 3.45: a regular (content-storing) FTS5 table is the single text store, so `snippet()` and `bm25()` work. |
+| Embedding model | `BAAI/bge-small-en-v1.5` is supported by fastembed 0.8 (384-d, ~67 MB). About 10–20 full-size chunks per second on 8 CPU threads. |
+| claude.ai export schema | Not yet verified against a real export; the parser is defensive and reports what it skipped. |
+
 ## Troubleshooting
 
 | Symptom | Check |
