@@ -1,0 +1,36 @@
+[Unit]
+Description=Claude Context Hub - MCP server
+After=network-online.target syncthing@@USER@.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@REPO@
+Environment=CLAUDE_CONTEXT_CONFIG=@CONFIG@
+Environment=HF_HOME=@DATA_DIR@/models
+EnvironmentFile=@CONFIG_DIR@/secrets.env
+ExecStart=@REPO@/.venv/bin/claude-context serve
+Restart=always
+RestartSec=3
+MemoryMax=2G
+# Writes: audit.db, OAuth store and reindex queue (data dir); memory and note files (writable roots).
+ReadWritePaths=@DATA_DIR@ @WRITABLE_ROOTS@
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

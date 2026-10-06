@@ -1,0 +1,10 @@
+[Unit]
+Description=Claude Context Hub - daily maintenance
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

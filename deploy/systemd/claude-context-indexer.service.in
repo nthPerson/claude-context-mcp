@@ -1,0 +1,38 @@
+[Unit]
+Description=Claude Context Hub - indexer
+After=network-online.target syncthing@@USER@.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@REPO@
+Environment=CLAUDE_CONTEXT_CONFIG=@CONFIG@
+Environment=HF_HOME=@DATA_DIR@/models
+ExecStart=@REPO@/.venv/bin/claude-context index --watch
+Restart=always
+RestartSec=5
+Nice=10
+IOSchedulingClass=idle
+CPUQuota=800%
+MemoryMax=6G
+# Writes: index.db, archive, model cache (data dir); moves imported zips out of the drop folder.
+ReadWritePaths=@DATA_DIR@ @DROP_DIR@
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

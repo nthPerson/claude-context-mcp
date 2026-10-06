@@ -1,0 +1,35 @@
+[project]
+name = "claude-context-hub"
+version = "0.1.0"
+description = "Self-hosted remote MCP server that gives every Claude surface read/write access to Claude Code memories, transcripts and notes from all of your machines."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=4.0,<5",
+    "sqlite-vec>=0.1.9",
+    "fastembed>=0.8,<0.9",
+    "watchfiles>=1.3",
+    "httpx>=0.28",
+    "pydantic>=2.13",
+    "cryptography>=50",
+    "pyyaml>=6",
+    "tomli-w>=1.2",
+]
+
+[project.scripts]
+claude-context = "claude_context.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=9", "pytest-asyncio>=1.4"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claude_context"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

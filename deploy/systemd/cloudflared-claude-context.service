@@ -1,0 +1,16 @@
+[Unit]
+Description=cloudflared tunnel for Claude Context Hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+# The token file is root-only (600), so this unit runs as root like the stock cloudflared unit.
+# It is deliberately separate from any other cloudflared.service on the machine.
+ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run --token-file /etc/cloudflared/claude-context.token
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

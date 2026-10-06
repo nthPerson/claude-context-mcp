@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Never commit local configuration, secrets or data
+config.toml
+secrets.env
+*.env
+*.db
+*.db-wal
+*.db-shm
+*.token
+/data/
+deploy/rendered/

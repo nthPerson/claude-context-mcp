@@ -1,0 +1,59 @@
+# Claude Context Hub configuration.
+# Copy to ~/.config/claude-context/config.toml (chmod 600) and edit. Secrets do NOT go here:
+# they live in ~/.config/claude-context/secrets.env (see README).
+
+owner_name = "Alex"                               # how the server refers to you in its instructions
+base_url = "https://claude-context.example.com"    # public origin; the MCP endpoint is <base_url>/mcp
+bind = "127.0.0.1:8790"
+allowed_github_ids = [1234567]                      # numeric GitHub user ids allowed to sign in
+# Defence in depth on /mcp: when non-empty, the Cf-Connecting-Ip header must be inside one of
+# these networks. Leave empty until you know where your Claude clients call from.
+allowed_mcp_source_cidrs = []                       # e.g. ["160.79.104.0/21"]
+retention_days = 365
+timezone = "America/Los_Angeles"
+default_max_chars = 20000
+max_max_chars = 100000
+
+# One entry per directory tree of Claude Code project folders (a ~/.claude/projects tree).
+# machine = "syncthing:<folder-id>" attributes each file to the Syncthing device that last
+# modified it; any other value is used as the machine name for everything under the root.
+[[roots]]
+label = "synced"
+path = "~/sync/claude-sessions"
+machine = "syncthing:claude-sessions"
+writable = true                                    # memories and notes are written here
+
+# Optional: recover sessions deleted upstream from Syncthing's versions folder.
+[[roots]]
+label = "recovered"
+path = "~/sync/claude-sessions/.stversions"
+kind = "stversions"
+
+[imports]
+claudeai_drop = "~/sync/claude-context-imports/claude-ai"   # drop claude.ai export zips here
+
+[embedding]
+enabled = true
+model = "BAAI/bge-small-en-v1.5"
+dim = 384
+threads = 8
+batch = 64
+embed_automated = false                            # SDK-driven sessions get keyword search only
+
+[syncthing]
+api = "http://127.0.0.1:8384"
+config_xml = "~/.local/state/syncthing/config.xml" # the API key is read from here at runtime
+
+# Human aliases for project keys (folder names under a root). The first key is the primary
+# one: new memories are written there. Unlisted keys get an automatic alias.
+[projects.website]
+keys = ["-home-alex-website"]
+display = "Company website"
+
+[projects.thesis]
+keys = ["-home-alex-thesis", "-mnt-c-Users-alex-Documents-thesis"]
+display = "Thesis"
+
+# claude.ai project name -> alias, for conversations imported from a claude.ai export.
+[claudeai_project_map]
+"Thesis writing" = "thesis"

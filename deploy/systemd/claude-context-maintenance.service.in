@@ -1,0 +1,29 @@
+[Unit]
+Description=Claude Context Hub - daily maintenance (archive, recovery, prune, backups)
+
+[Service]
+Type=oneshot
+User=@USER@
+WorkingDirectory=@REPO@
+Environment=CLAUDE_CONTEXT_CONFIG=@CONFIG@
+ExecStart=@REPO@/.venv/bin/claude-context maintenance
+Nice=10
+IOSchedulingClass=idle
+MemoryMax=4G
+# Writes: data dir; MEMORY.md conflict merges in the writable roots.
+ReadWritePaths=@DATA_DIR@ @WRITABLE_ROOTS@
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
