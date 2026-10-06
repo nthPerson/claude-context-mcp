@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS messages(
 );
 CREATE INDEX IF NOT EXISTS messages_uuid ON messages(uuid);
 CREATE INDEX IF NOT EXISTS messages_tool_use ON messages(tool_use_id);
+CREATE INDEX IF NOT EXISTS messages_doc ON messages(doc_id);
 
 CREATE TABLE IF NOT EXISTS memories(
     id INTEGER PRIMARY KEY,
@@ -131,6 +132,7 @@ CREATE TABLE IF NOT EXISTS memories(
     doc_id INTEGER                        -- NULL for archived memories (not searchable)
 );
 CREATE INDEX IF NOT EXISTS memories_project ON memories(project_id, modified_at);
+CREATE INDEX IF NOT EXISTS memories_doc ON memories(doc_id);
 
 CREATE TABLE IF NOT EXISTS notes(
     id INTEGER PRIMARY KEY,
@@ -147,6 +149,7 @@ CREATE TABLE IF NOT EXISTS notes(
     doc_id INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS notes_project ON notes(project_id, created_at);
+CREATE INDEX IF NOT EXISTS notes_doc ON notes(doc_id);
 
 CREATE TABLE IF NOT EXISTS docs(
     id INTEGER PRIMARY KEY,
